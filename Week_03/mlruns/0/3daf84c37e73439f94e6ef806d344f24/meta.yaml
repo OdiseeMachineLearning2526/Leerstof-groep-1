@@ -1,0 +1,14 @@
+artifact_uri: file:///workspace/groep1/Week_03/mlruns/0/3daf84c37e73439f94e6ef806d344f24/artifacts
+end_time: 1760010741558
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 3daf84c37e73439f94e6ef806d344f24
+run_name: pytorch_example
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1760010734984
+status: 3
+tags: []
+user_id: root
