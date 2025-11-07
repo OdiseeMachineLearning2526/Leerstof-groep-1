@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Figuur uploader</title>
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; padding: 24px; max-width:800px; margin:auto; }
+    h1 { font-size: 1.6rem; }
+    .dropzone {
+      border: 2px dashed #bbb;
+      border-radius: 8px;
+      padding: 18px;
+      text-align: center;
+      color: #555;
+      margin-bottom: 12px;
+      transition: border-color .15s, background .15s;
+    }
+    .dropzone.dragover { border-color: #333; background: #fafafa; }
+    img.preview { max-width: 100%; max-height: 320px; display:block; margin: 12px auto; border-radius:6px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .controls { display:flex; gap:8px; align-items:center; margin-bottom:12px; }
+    button { padding: 8px 12px; border-radius:6px; border: 1px solid #888; background: #fff; cursor:pointer; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    pre { background: #f6f6f6; padding:12px; border-radius:6px; overflow:auto; }
+    .info { color:#666; font-size:.9rem; }
+  </style>
+</head>
+<body>
+  <h1>Figuur selecteren & uploaden</h1>
+  <p class="info">Selecteer een afbeelding (PNG, JPG, SVG, ...) of sleep hem in het vak. Klik op "Verstuur naar server" om de figuur via POST te sturen naar <code>http://localhost:5000/upload</code>. De server-respons verschijnt onderaan.</p>
+
+  <div id="dropzone" class="dropzone">
+    Sleep hier je figuur heen of klik op "Selecteer bestand".
+    <div style="margin-top:10px;">
+      <input id="fileInput" type="file" accept="image/*,image/svg+xml" style="display:none" />
+      <button id="selectBtn" type="button">Selecteer bestand</button>
+      <span id="fileName" style="margin-left:12px;color:#444"></span>
+    </div>
+  </div>
+
+  <img id="preview" class="preview" style="display:none" alt="Preview" />
+
+  <div class="controls">
+    <button id="uploadBtn" disabled>Verstuur naar server</button>
+    <button id="clearBtn" type="button" disabled>Wis</button>
+    <div id="status" style="margin-left:12px; color:#333"></div>
+  </div>
+
+  <h3>Server response</h3>
+  <pre id="responseArea">{ geen response nog }</pre>
+
+<script>
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const selectBtn = document.getElementById('selectBtn');
+  const fileNameSpan = document.getElementById('fileName');
+  const previewImg = document.getElementById('preview');
+  const uploadBtn = document.getElementById('uploadBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const responseArea = document.getElementById('responseArea');
+  const statusDiv = document.getElementById('status');
+
+  let selectedFile = null;
+
+  selectBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+  // Drag & drop
+  ['dragenter','dragover'].forEach(ev => {
+    dropzone.addEventListener(ev, (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dropzone.classList.add('dragover');
+    });
+  });
+  ['dragleave','drop'].forEach(ev => {
+    dropzone.addEventListener(ev, (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dropzone.classList.remove('dragover');
+    });
+  });
+  dropzone.addEventListener('drop', (e) => {
+    const dt = e.dataTransfer;
+    if (dt && dt.files && dt.files.length) handleFiles(dt.files);
+  });
+
+  function handleFiles(fileList) {
+    if (!fileList || fileList.length === 0) return;
+    const file = fileList[0];
+    selectedFile = file;
+    fileNameSpan.textContent = file.name + ' (' + Math.round(file.size/1024) + ' KB)';
+    uploadBtn.disabled = false;
+    clearBtn.disabled = false;
+    showPreview(file);
+    responseArea.textContent = '{ klaar om te uploaden }';
+    statusDiv.textContent = '';
+  }
+
+  function showPreview(file) {
+    const url = URL.createObjectURL(file);
+    previewImg.src = url;
+    previewImg.style.display = 'block';
+    // revoke later when image loads
+    previewImg.onload = () => { URL.revokeObjectURL(url); };
+  }
+
+  clearBtn.addEventListener('click', () => {
+    selectedFile = null;
+    fileInput.value = '';
+    fileNameSpan.textContent = '';
+    previewImg.src = '';
+    previewImg.style.display = 'none';
+    uploadBtn.disabled = true;
+    clearBtn.disabled = true;
+    responseArea.textContent = '{ geen response nog }';
+    statusDiv.textContent = '';
+  });
+
+  uploadBtn.addEventListener('click', async () => {
+    if (!selectedFile) return;
+    uploadBtn.disabled = true;
+    statusDiv.textContent = 'Uploading…';
+    responseArea.textContent = '';
+
+    try {
+      const url = 'http://localhost:5000/predict'; // wijzig deze URL indien nodig
+      const form = new FormData();
+      // het veld heet 'figure' (server zoekt meestal op dit veld)
+      form.append('figure', selectedFile, selectedFile.name);
+
+      const res = await fetch(url, {
+        method: 'POST',
+        body: form
+        // let the server handle CORS; voeg credentials etc. toe als jouw server dat vereist
+      });
+
+      const contentType = res.headers.get('content-type') || '';
+      let bodyText;
+      if (contentType.includes('application/json')) {
+        const json = await res.json();
+        bodyText = JSON.stringify(json, null, 2);
+      } else {
+        bodyText = await res.text();
+      }
+
+      responseArea.textContent = `HTTP ${res.status} ${res.statusText}\n\n${bodyText}`;
+      statusDiv.textContent = 'Klaar';
+      if (!res.ok) statusDiv.textContent = 'Server gaf een fout (zie response)';
+    } catch (err) {
+      responseArea.textContent = 'Fout bij upload: ' + String(err);
+      statusDiv.textContent = 'Fout';
+    } finally {
+      uploadBtn.disabled = false;
+    }
+  });
+
+</script>
+</body>
+</html>
